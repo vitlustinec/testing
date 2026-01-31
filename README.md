@@ -15,10 +15,11 @@ Výstupy:
 ## Webové rozhraní
 
 Spusťte lokální server s jednoduchým UI, které umožňuje zadat libovolnou URL a
-průběžně sledovat postup crawleru:
+průběžně sledovat postup crawleru. Nejprve se spustí web a **teprve po zadání
+adresy a kliknutí na „Spustit crawler“** se spustí samotné procházení:
 
 ```bash
 python3 scripts/web_server.py
 ```
 
-Poté otevřete `http://localhost:8000`.
+Poté otevřete `http://localhost:8000`, zadejte cílovou URL a spusťte crawler.
