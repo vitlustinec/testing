@@ -160,6 +160,7 @@ def crawl_site(
     start_urls: set[str],
     max_pages: int,
     delay: float,
+    on_progress: collections.abc.Callable[[dict], None] | None = None,
 ) -> tuple[dict[str, dict], dict[str, set[str]]]:
     pages: dict[str, dict] = {}
     edges: dict[str, set[str]] = collections.defaultdict(set)
@@ -192,10 +193,68 @@ def crawl_site(
                 if normalized not in seen:
                     queue.append(normalized)
         pages[current] = page_info
+        if on_progress:
+            on_progress(
+                {
+                    "type": "page",
+                    "url": current,
+                    "count": len(seen),
+                    "status": status,
+                }
+            )
         if delay:
             time.sleep(delay)
 
     return pages, edges
+
+
+def run_crawl(
+    start_url: str,
+    max_pages: int,
+    delay: float,
+    output_dir: str,
+    on_progress: collections.abc.Callable[[dict], None] | None = None,
+) -> dict[str, dict]:
+    if on_progress:
+        on_progress({"type": "status", "message": "Hledám sitemap..."})
+    sitemap_roots = discover_sitemaps(start_url)
+    sitemap_urls = collect_sitemap_urls(sitemap_roots)
+    if on_progress:
+        on_progress(
+            {
+                "type": "status",
+                "message": f"Nalezeno URL v sitemap: {len(sitemap_urls)}",
+            }
+        )
+
+    start_urls = {start_url} | {normalize_url(url) for url in sitemap_urls if url}
+    start_urls = {url for url in start_urls if url and is_mmhk(url)}
+
+    if on_progress:
+        on_progress(
+            {
+                "type": "status",
+                "message": f"Spouštím crawler pro {len(start_urls)} URL.",
+            }
+        )
+    pages, edges = crawl_site(start_urls, max_pages, delay, on_progress)
+    if on_progress:
+        on_progress(
+            {
+                "type": "status",
+                "message": f"Zpracováno stránek: {len(pages)}",
+            }
+        )
+
+    write_reports(output_dir, pages, edges, sitemap_urls)
+    if on_progress:
+        on_progress(
+            {
+                "type": "status",
+                "message": f"Výstupy zapsány do {output_dir}",
+            }
+        )
+    return pages
 
 
 def build_tree(urls: list[str]) -> dict:
@@ -304,20 +363,17 @@ def main() -> None:
     if not start_url:
         raise SystemExit("Neplatná start URL.")
 
-    logging.info("Hledám sitemap...")
-    sitemap_roots = discover_sitemaps(start_url)
-    sitemap_urls = collect_sitemap_urls(sitemap_roots)
-    logging.info("Nalezeno URL v sitemap: %s", len(sitemap_urls))
+    def log_progress(payload: dict) -> None:
+        if payload.get("type") == "status":
+            logging.info(payload.get("message"))
 
-    start_urls = {start_url} | {normalize_url(url) for url in sitemap_urls if url}
-    start_urls = {url for url in start_urls if url and is_mmhk(url)}
-
-    logging.info("Spouštím crawler pro %s URL.", len(start_urls))
-    pages, edges = crawl_site(start_urls, args.max_pages, args.delay)
-    logging.info("Zpracováno stránek: %s", len(pages))
-
-    write_reports(args.output, pages, edges, sitemap_urls)
-    logging.info("Výstupy zapsány do %s", args.output)
+    run_crawl(
+        start_url=start_url,
+        max_pages=args.max_pages,
+        delay=args.delay,
+        output_dir=args.output,
+        on_progress=log_progress,
+    )
 
 
 if __name__ == "__main__":
