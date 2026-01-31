@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapa stránek - mmhk.cz</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        background: #f7f7fb;
+        color: #1e1e2f;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: #fff;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .controls {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      input[type="url"] {
+        flex: 1 1 300px;
+        padding: 0.6rem 0.8rem;
+        border-radius: 8px;
+        border: 1px solid #d0d0dd;
+      }
+      button {
+        background: #2950ff;
+        color: white;
+        border: none;
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        background: #9aa8ff;
+        cursor: not-allowed;
+      }
+      .status {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 10px;
+        background: #f0f3ff;
+      }
+      .log {
+        margin-top: 1rem;
+        max-height: 280px;
+        overflow: auto;
+        border: 1px solid #e0e0ef;
+        border-radius: 8px;
+        padding: 0.75rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        background: #fbfbff;
+      }
+      .log-entry {
+        margin-bottom: 0.35rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Generátor mapy stránek</h1>
+      <p>
+        Zadejte URL libovolného webu. Po spuštění crawleru se průběžně zobrazí stav a
+        počet navštívených stránek.
+      </p>
+      <div class="controls">
+        <input
+          type="url"
+          id="urlInput"
+          placeholder="https://www.mmhk.cz/"
+          value="https://www.mmhk.cz/"
+          required
+        />
+        <input
+          type="url"
+          id="backendInput"
+          placeholder="http://localhost:8000"
+          value="http://localhost:8000"
+          required
+        />
+        <button id="startButton">Spustit crawler</button>
+      </div>
+
+      <div class="status" id="statusBox">
+        Stav: <strong id="statusText">Připraveno</strong><br />
+        Zpracováno: <strong id="countText">0</strong> stránek
+      </div>
+
+      <div class="log" id="logBox"></div>
+    </div>
+
+    <script>
+      const startButton = document.getElementById("startButton");
+      const statusText = document.getElementById("statusText");
+      const countText = document.getElementById("countText");
+      const logBox = document.getElementById("logBox");
+      const urlInput = document.getElementById("urlInput");
+      const backendInput = document.getElementById("backendInput");
+      let eventSource = null;
+
+      function addLog(message) {
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        entry.textContent = message;
+        logBox.appendChild(entry);
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      function setRunning(isRunning) {
+        startButton.disabled = isRunning;
+        if (!isRunning && eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      }
+
+      async function startCrawl() {
+        const url = urlInput.value.trim();
+        const backendUrl = backendInput.value.trim().replace(/\/$/, "");
+        if (!url) {
+          return;
+        }
+        statusText.textContent = "Spouštím...";
+        countText.textContent = "0";
+        logBox.innerHTML = "";
+        setRunning(true);
+
+        const response = await fetch(`${backendUrl}/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+
+        if (!response.ok) {
+          statusText.textContent = "Chyba";
+          setRunning(false);
+          addLog("Nepodařilo se spustit crawler.");
+          return;
+        }
+
+        eventSource = new EventSource(`${backendUrl}/events`);
+        eventSource.onmessage = (event) => {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "status") {
+            statusText.textContent = payload.message;
+            addLog(payload.message);
+          }
+          if (payload.type === "page") {
+            countText.textContent = payload.count;
+            addLog(`+ ${payload.url}`);
+          }
+          if (payload.type === "done") {
+            statusText.textContent = payload.message;
+            addLog(payload.message);
+            setRunning(false);
+          }
+          if (payload.type === "error") {
+            statusText.textContent = payload.message;
+            addLog(payload.message);
+            setRunning(false);
+          }
+        };
+      }
+
+      startButton.addEventListener("click", startCrawl);
+    </script>
+  </body>
+</html>
