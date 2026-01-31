@@ -84,6 +84,13 @@
           value="https://www.mmhk.cz/"
           required
         />
+        <input
+          type="url"
+          id="backendInput"
+          placeholder="http://localhost:8000"
+          value="http://localhost:8000"
+          required
+        />
         <button id="startButton">Spustit crawler</button>
       </div>
 
@@ -101,6 +108,7 @@
       const countText = document.getElementById("countText");
       const logBox = document.getElementById("logBox");
       const urlInput = document.getElementById("urlInput");
+      const backendInput = document.getElementById("backendInput");
       let eventSource = null;
 
       function addLog(message) {
@@ -121,6 +129,7 @@
 
       async function startCrawl() {
         const url = urlInput.value.trim();
+        const backendUrl = backendInput.value.trim().replace(/\/$/, "");
         if (!url) {
           return;
         }
@@ -129,7 +138,7 @@
         logBox.innerHTML = "";
         setRunning(true);
 
-        const response = await fetch("/start", {
+        const response = await fetch(`${backendUrl}/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
@@ -142,7 +151,7 @@
           return;
         }
 
-        eventSource = new EventSource("/events");
+        eventSource = new EventSource(`${backendUrl}/events`);
         eventSource.onmessage = (event) => {
           const payload = JSON.parse(event.data);
           if (payload.type === "status") {

@@ -40,9 +40,15 @@ STATE = CrawlState()
 
 
 class RequestHandler(BaseHTTPRequestHandler):
+    def _set_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _send_json(self, status: int, payload: dict) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
+        self._set_cors_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -51,10 +57,16 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _send_file(self, path: Path) -> None:
         data = path.read_bytes()
         self.send_response(HTTPStatus.OK)
+        self._set_cors_headers()
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def do_OPTIONS(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self._set_cors_headers()
+        self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
         if self.path == "/":
@@ -62,6 +74,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/events":
             self.send_response(HTTPStatus.OK)
+            self._set_cors_headers()
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
